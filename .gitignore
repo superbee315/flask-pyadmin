@@ -1,0 +1,15 @@
+.project
+.pydevproject
+.settings/org.eclipse.core.resources.prefs
+*/__pycache__
+*.pyc
+.idea/.gitignore
+.idea/misc.xml
+.idea/modules.xml
+.idea/pyadmin.iml
+.idea/vcs.xml
+.idea/inspectionProfiles/profiles_settings.xml
+.idea/inspectionProfiles/Project_Default.xml
+.env
+.idea/
+.history/
