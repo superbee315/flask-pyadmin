@@ -6,14 +6,14 @@ Created on 2021年5月11日
 import ast, numpy
 
 from flask import request, g
-from flask_login import login_required, current_user
 
 from sqlalchemy import or_
 from pyadmin.app import db
 from pyadmin.common.model import queryToDict
 from pyadmin.admin.validate.admin import *
 from pyadmin.common.model.admin import Admin, AuthGroupAccess, AuthGroup, AuthRule
-from .. import Backend, admin, access_view
+from .. import Backend, admin, access_view, login_required
+from pyadmin.common.library.authtoken import Jwt, Auth, Token
 
 @admin.resource('/login')
 class AdminLogin(Backend):
@@ -24,7 +24,7 @@ class AdminLogin(Backend):
 
     def post(self):
         '''
-        登录
+        管理员登录
         '''
         try:
             form = LoginForm(meta={'csrf': False})
@@ -33,11 +33,11 @@ class AdminLogin(Backend):
                 password = request.form['password']
                 res = self.login(username, password)
                 if res:
-                    current = queryToDict(current_user)
+                    current = queryToDict(g.admin)
                     current['token'] = self.jwt
+                    current['status'] = g.admin.status.value
                     del current['salt']
-                    current['status'] = str(current['status'])
-                    return self.success(msg='Login succeed', data=current)
+                    return self.success(msg='Login successed', data=current)
                 
                 return self.error(msg='Username or password is incorrect')
         except Exception as e:
@@ -100,7 +100,6 @@ class AdminList(Backend):
 
             return self.success(data={'list': rows, 'count': count})
         except Exception as e:
-            db.session.rollback()
             err = ast.literal_eval(str(e))
             return self.error(msg=err)
 
@@ -293,13 +292,14 @@ class AuthGroupList(Backend):
             count = self.model.query.filter(AuthGroup.id.in_(childrenGroupIds)).count()
             rows = self.model.query.filter(AuthGroup.id.in_(childrenGroupIds)).all()
 
-            rows = queryToDict(rows)
             tree = []
 
             for row in rows:
-                children = self.deal_menu(rows, row['id'])
-                if children: row['children'] = children
-                if row['pid'] not in childrenGroupIds: tree.append(row)
+                info = {'id': row.id, 'pid': row.pid, 'name': row.name, 'rules': row.rules,
+                        'createtime': row.createtime, 'updatetime': row.updatetime, 'status': row.status.value}
+                children = self.deal_menu(rows, row.id)
+                if children: info['chirdren'] = children
+                if row.pid not in childrenGroupIds: tree.append(info)
 
             return self.success(data={'list': tree, 'count': count})
         except Exception as e:
@@ -405,10 +405,12 @@ class AuthGroupList(Backend):
         data = []
 
         for row in rows:
-            if row['pid'] == _id:
-                children = self.deal_menu(rows, row['id'])
-                if children: row['children'] = children
-                data.append(row)
+            if row.pid == _id:
+                info = {'id': row.id, 'pid': row.pid, 'name': row.name, 'rules': row.rules,
+                        'createtime': row.createtime, 'updatetime': row.updatetime, 'status': row.status.value}
+                children = self.deal_menu(rows, row.id)
+                if children: info['children'] = children
+                data.append(info)
 
         return data
 
@@ -541,13 +543,16 @@ class AuthRuleList(Backend):
             if not self.is_super_admin(): return self.error(msg='No super admin permission')
 
             rows = self.model.query.filter().all()
-            rows = queryToDict(rows)
             tree = []
 
             for row in rows:
-                children = self.deal_menu(rows, row['id'])
-                if children: row['children'] = children
-                if row['pid'] == 0: tree.append(row)
+                info = {'id': row.id, 'type': row.type.value, 'pid': row.pid, 'name': row.name,
+                        'title': row.title, 'url': row.url, 'icon': row.icon, 'condition': row.condition,
+                        'remark': row.remark, 'ismenu': row.ismenu, 'createtime': row.createtime,
+                        'updatetime': row.updatetime, 'weigh': row.weigh, 'status': row.status.value}
+                children = self.deal_menu(rows, row.id)
+                if children: info['children'] = children
+                if row.pid == 0: tree.append(info)
 
             return self.success(data={'count': len(tree), 'tree': tree})
         except Exception as e:
@@ -616,10 +621,14 @@ class AuthRuleList(Backend):
         data = []
 
         for row in rows:
-            if row['pid'] == _id:
-                children = self.deal_menu(rows, row['id'])
-                if children: row['children'] = children
-                data.append(row)
+            if row.pid == _id:
+                info = {'id': row.id, 'type': row.type.value, 'pid': row.pid, 'name': row.name,
+                        'title': row.title, 'url': row.url, 'icon': row.icon, 'condition': row.condition,
+                        'remark': row.remark, 'ismenu': row.ismenu, 'createtime': row.createtime,
+                        'updatetime': row.updatetime, 'weigh': row.weigh, 'status': row.status.value}
+                children = self.deal_menu(rows, row.id)
+                if children: info['children'] = children
+                data.append(info)
 
         return data
 
@@ -881,8 +890,8 @@ class AdminMyInfo(Backend):
         获取自身信息
         '''
         try:
-            if not current_user: return self.error(msg='No Results were found')
-            current = queryToDict(current_user)
+            if not g.admin: return self.error(msg='No Results were found')
+            current = queryToDict(g.admin)
             current['status'] = str(current['status'])
             groups = self.auth.getGroups(current['id'])
             current['groups'] = [{'id': group.id, 'name': group.name} for group in groups]

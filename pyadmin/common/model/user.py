@@ -11,7 +11,7 @@
 
 import time, enum
 from flask_login import UserMixin
-from pyadmin.extensions import db, login_manager
+from pyadmin.extensions import db
 from .base import PkModel, Model
 from werkzeug.security import generate_password_hash, check_password_hash
 

@@ -2,9 +2,8 @@ import json, time, urllib, numpy
 from functools import wraps
 from flask import Blueprint, jsonify, helpers, request, g
 from flask_restful import Api, Resource
-from flask_login import login_user, logout_user
-from pyadmin.app import login_manager, db
-from pyadmin.common.library.authtoken import AuthToken, Auth
+from pyadmin.app import db
+from pyadmin.common.library.authtoken import Jwt, Auth, Token
 from pyadmin.common.model.admin import Admin, AuthGroup, UserEnum, AuthGroupAccess, AuthRule
 
 bp_admin = Blueprint('admin', __name__, url_prefix='/admin')
@@ -41,6 +40,46 @@ def access_view(func):
             return helpers.make_response(jsonify(_result), 403)
         
     return decorator
+
+def login_required(func):
+    '''
+    判断用户是否登陆
+    :param func: The view function to decorate.
+    :type func: function
+    '''
+    @wraps(func)
+    def decorated_view(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return func(*args, **kwargs)
+        
+        # 找到jwt
+        jwt = request.headers.get('Authorization')
+        payload = Jwt.decode(jwt)
+        # 判断数据是否正确
+        if payload:
+            # 先判断有效期
+            if int(time.time()) > payload['exp']:
+                return helpers.make_response(Backend().error('Token has expired'), 401)
+            
+            # 判断redis中的数据是否相同
+            admin_id = Token.get(jwt)
+            if not admin_id:
+                return helpers.make_response(Backend().error('Redis data error'), 401)
+            
+            if 'id' not in payload:
+                return helpers.make_response(Backend().error('Payload data error'), 401)
+            
+            if int(admin_id) != payload['id']:
+                return helpers.make_response(Backend().error('Data exception'), 401)
+            
+            admin = Admin().get_by_id(payload['id'])
+            g.admin = admin
+            Backend.jwt = jwt
+            return func(*args, **kwargs)
+        else:
+            return helpers.make_response(Backend().error('Please login first'), 401)
+    
+    return decorated_view
 
 def loop_get_children(group_list, _id):
     '''
@@ -81,8 +120,9 @@ class Backend(Resource):
         if not admin.verify_password(password):
             return False
         
-        login_user(admin)
-        self.jwt = AuthToken.encode(admin.id, admin.username)
+        self.jwt = Jwt.encode(admin.id, admin.username)
+        Token.set(self.jwt, admin.id)
+        g.admin = admin
         
         return True
         
@@ -90,7 +130,7 @@ class Backend(Resource):
         '''
         用户退出
         '''
-        logout_user()
+        Token.delete(self.jwt)
     
     def success(self, msg='OK', data={} or [], code=1):
         return self.__result(msg, data, code)
@@ -107,7 +147,6 @@ class Backend(Resource):
         }
         
         return jsonify(res)
-
     
     def get_children_group_ids(self, withself=False, pid=-1):
         '''
@@ -192,14 +231,12 @@ class Backend(Resource):
 
         childrenRuleIds = [_g.id for _g in obj_list]
         return childrenRuleIds
-
         
     def is_super_admin(self):
         '''
         判断当前登陆用户是否为超级管理员
         '''
         return True if '*' in self.auth.getRuleIds(g.admin.id) else False
-        
     
     def buildparam(self):
         '''
@@ -239,36 +276,17 @@ class Backend(Resource):
                     where.append(getattr(self.model, k) == ("%s" % v))
                 elif f.lower() == 'like':
                     where.append(getattr(self.model, k).like("%{0}%".format(v)))
+                elif f.lower() == 'in':
+                    where.append(getattr(self.model, k).in_(v.split(',')))
             else:
                 raise ValueError('[where] model field not found field')
                 
         return (order, offset, limit, where)
     
     @staticmethod
-    @login_manager.unauthorized_handler
     def unauthorized():
         return helpers.make_response(Backend().error('Please login first'), 401)
     
-    @staticmethod
-    @login_manager.request_loader
-    def load_admin_from_request(request):
-        token = request.headers.get('Authorization')
-        if not token:
-            return None
-        
-        payload = AuthToken.decode(token)
-        # 是否能找到数据
-        if payload:
-            # 先判断有效期
-            if int(time.time()) > payload['exp']:
-                return None
-    
-            admin = Admin().get_by_id(payload['id'])
-            g.admin = admin
-            Backend.jwt = token
-        else:
-            admin = None
-        return admin
     
     @staticmethod
     @bp_admin.errorhandler(404)

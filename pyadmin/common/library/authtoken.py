@@ -6,13 +6,79 @@ Created on 2021年5月8日
 import jwt, datetime, numpy
 from . import synchronized
 from flask import current_app, request
-from pyadmin.extensions import db
-from pyadmin.common.model import admin
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import desc
-from pyadmin.common.model import queryToDict
+from pyadmin.extensions import db
+from pyadmin.common.model import admin, queryToDict
+from pyadmin.common.library.token.redis import RedisToken
 
-class AuthToken(object):
+class Token():
+    _handler = None
+    
+    @staticmethod
+    def init():
+        '''
+        自动初始化Token
+        '''
+        if Token._handler == None:
+            Token._handler = RedisToken()
+        
+        return Token._handler
+
+    @staticmethod
+    def has(token:str, user_id:int):
+        '''
+        判断Token是否可用（check别名)
+        :param token: Token
+        :param user_id: 会员Id
+        '''
+        return Token.check(token, user_id)
+
+    @staticmethod
+    def check(token:str, user_id:int):
+        '''
+        判断Token是否可用
+        :param token: Token
+        :param user_id: 会员Id
+        '''
+        return Token.init().check(token, user_id)
+
+    @staticmethod
+    def get(token:str, default=None):
+        '''
+        获取Token
+        :param token: Token
+        :param default: 默认值
+        '''
+        data = Token.init().get(token) 
+        return data if data else default
+    
+    @staticmethod
+    def set(token:str, user_id:int):
+        '''
+        写入Token
+        :param token: Token
+        :param user_id: 储存数据
+        '''
+        return Token.init().set(token, user_id)
+    
+    @staticmethod
+    def delete(token:str):
+        '''
+        删除Token
+        :param token: Token
+        '''
+        return Token.init().delete(token)
+    
+    @staticmethod
+    def clear(user_id:int):
+        '''
+        清除Token
+        :param user_id: 会员Id
+        '''
+        return Token.init().clear(user_id)
+        
+class Jwt(object):
     '''
     jwt 验证器
     '''
@@ -66,10 +132,10 @@ class Auth(object):
     '''
     权限认证类
     '''
-    instance = None
+    instance = None 
     groups = {}
     rules = []
-    rule_list = {}
+    rule_list = {}          # 用户对应的规则列表 {rule.name: {}}
     rule_check_list = {}
     
     @synchronized
@@ -81,7 +147,7 @@ class Auth(object):
             cls.instance = super().__new__(cls)
         return cls.instance
     
-    def check(self, uid, rules=[], relation='or'):
+    def check(self, uid:int, rules=[], relation='or'):
         '''
         检查权限
         :param uid: 认证用户的id
@@ -131,7 +197,7 @@ class Auth(object):
         self.groups[uid] = [x[0] for x in user_groups]
         return self.groups[uid]
     
-    def getRuleList(self, uid):
+    def getRuleList(self, uid:int):
         '''
         获得权限规则列表
         :param uid: 用户id
@@ -151,7 +217,6 @@ class Auth(object):
             rulelist['*'] = '*'
             
         rules = db.create_scoped_session().query(admin.AuthRule).\
-        options(load_only(*['id','pid','condition','url','icon','name','title','ismenu'])).\
         filter(admin.AuthRule.status == admin.UserEnum.normal).\
         filter(admin.AuthRule.id.in_(ids) if '*' not in ids else True).\
         filter(admin.AuthRule.ismenu == 1).\
@@ -166,7 +231,7 @@ class Auth(object):
         self.rule_list[uid] = rulelist
         return rulelist
 
-    def getRuleIds(self, uid):
+    def getRuleIds(self, uid:int):
         '''
         读取用户所属用户组
         :param uid: 用户id
@@ -179,19 +244,19 @@ class Auth(object):
         
         return list(set(ids))
 
-    def getCheckRuleList(self, uid):
+    def getCheckRuleList(self, uid:int):
         '''
         获得权限规则列表
         :param uid: 用户id
         '''
         if uid in self.rule_check_list:
             return self.rule_check_list[uid]
-
+        
         # 读取用户规则节点
         ids = self.getRuleIds(uid)
         if not ids:
             self.rule_list[uid] = {}
-            return None
+            return {}
 
         # 循环加入规则
         rulelist = {}
@@ -199,11 +264,8 @@ class Auth(object):
             rulelist['*'] = '*'
 
         rules = db.create_scoped_session().query(admin.AuthRule). \
-            options(load_only(*['id', 'pid', 'condition', 'icon', 'name', 'title', 'ismenu'])). \
             filter(admin.AuthRule.id.in_(ids) if '*' not in ids else True). \
-            order_by(desc(admin.AuthRule.weigh)). \
-            all()
-
+            order_by(desc(admin.AuthRule.weigh)).all()
         rules = queryToDict(rules)
 
         for rule in rules:
@@ -222,3 +284,7 @@ class Auth(object):
         self.rule_check_list = {}
 
         return self
+    
+    
+    
+    

@@ -52,10 +52,6 @@ class Config(PkModel):
         return options
 
     @staticmethod
-    def query_by_name(name):
-        return Config.query.filter(Config.name == name).first()
-
-    @staticmethod
     def allowed_file(filename):
         '''
         文件后缀名检查
