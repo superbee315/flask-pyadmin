@@ -13,7 +13,12 @@ pyadmin是一款基于Flask和Vue-Vben-Admin的极速后台开发框架。
  * general  _常规管理模块_
    * config _系统配置模块_
    * attachment _附件管理模块_
-
+ * member _会员模块_
+   * unit _单位管理模块_
+   * person _个人管理模块_
+   * user _会员管理模块_
+   * check _审核管理模块_
+ 
 * 目前已完成配合MySql完成数据库接入、基于JWT的登录验证和权限验证、基于蓝图的路由配置等功能。
 
 ## 特别鸣谢

@@ -68,6 +68,51 @@ def model_to_dict(model):
             value = _val    # 判断枚举
             
         yield (_name, value)    
+
+def cursorToDict(cursor, _list):
+    '''
+    查询到的cursor转成dict
+    :param cursor
+    :param _list 要查询的字段
+    '''
+    results = cursor.fetchall()
+    rows = []
+    for result in results:
+        rows.append(dict(zip(_list, result)))
+    return rows
+
+def dictToSql(field_dict):
+    '''
+    dict转换为sql语句
+    :param field_dict 查询字段所构成的字典
+    '''
+    select = 'SELECT'
+    for k,v in field_dict.items():
+        select = '{} {} AS {},'.format(select, v, k)
+    select = select[:-1]
+    return select
+
+def sqlToCount(sql):
+    '''
+    sql语句转换为count
+    :param sql语句
+    '''
+    # 禁止添加
+    if 'INSERT' in sql:
+        return 0
+    # 禁止修改
+    if 'UPDATE' in sql:
+        return 0
+    #检查关键字select是否在首位
+    if sql.find('SELECT') != 0 and sql.find('select') != 0:
+        return 0
+    #检查关键字from是否存在
+    if 'FROM' not in sql and 'from' not in sql:
+        return 0
+    #检查关键字count是否存在
+    if 'COUNT' not in sql and 'count' not in sql:
+        return 0
+    return db.session.execute(sql).first()[0]
         
 def find_datetime(value):
     for v in value:
