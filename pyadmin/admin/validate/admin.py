@@ -68,3 +68,13 @@ class RuleDetailForm(RequestBaseForm):
     weigh = IntegerField('weigh', validators=[Optional(strip_whitespace=False),
                                               InputRequired(message="权重不能为空")])
 
+class AdminMyInfoForm(RequestBaseForm):
+    email = StringField('email', validators=[Optional(strip_whitespace=False),
+                                             Email(message='请填写有效的邮箱'),
+                                             DataRequired(message="Email不能为空")])
+    nickname = StringField('nickname', validators=[Optional(strip_whitespace=False),
+                                                   DataRequired(message="昵称不能为空")])
+    password = StringField('password', validators=[Length(max=16, min=6, message="请填写6-16位字符，不能包含空格"),
+                                                   Optional(strip_whitespace=False),
+                                                   DataRequired(message="密码不能为空")])
+

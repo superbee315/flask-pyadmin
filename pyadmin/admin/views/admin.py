@@ -900,3 +900,20 @@ class AdminMyInfo(Backend):
             err = ast.literal_eval(str(e))
             return self.error(msg=err)
 
+    @login_required
+    def put(self):
+        '''
+        修改个人信息
+        '''
+        try:
+            if not g.admin: return self.error(msg='No Results were found')
+            form = AdminMyInfoForm(meta={'csrf': False})
+            if form.validate_for_api():
+                data = request.form.to_dict()
+                g.admin.update(**data)
+                db.session.commit()
+                return self.success(msg='Operation completed')
+        except Exception as e:
+            err = ast.literal_eval(str(e))
+            return self.error(msg=err)
+
