@@ -1,0 +1,111 @@
+<!--
+ * @Author: Vben
+ * @Description: logo component
+-->
+<template>
+  <div class="anticon" :class="getAppLogoClass" @click="goHome">
+    <img v-if="logo !== imgUrlPrefix" :src="logo" />
+    <div class="ml-2 truncate md:opacity-100" :class="getTitleClass" v-show="showTitle">
+      {{ title }}
+    </div>
+  </div>
+</template>
+<script lang="ts">
+  import { defineComponent, computed, unref } from 'vue';
+  import { useGlobSetting } from '/@/hooks/setting';
+  import { useGo } from '/@/hooks/web/usePage';
+  import { useMenuSetting } from '/@/hooks/setting/useMenuSetting';
+  import { useDesign } from '/@/hooks/web/useDesign';
+  import { PageEnum } from '/@/enums/pageEnum';
+  import { useAppStore } from '/@/store/modules/app';
+
+  const props = {
+    /**
+     * The theme of the current parent component
+     */
+    theme: { type: String, validator: (v) => ['light', 'dark'].includes(v) },
+    /**
+     * Whether to show title
+     */
+    showTitle: { type: Boolean, default: true },
+    /**
+     * The title is also displayed when the menu is collapsed
+     */
+    alwaysShowTitle: { type: Boolean },
+  };
+
+  export default defineComponent({
+    name: 'AppLogo',
+    props: props,
+    setup(props) {
+      const { imgUrlPrefix } = useGlobSetting();
+      const appStore = useAppStore();
+      const { prefixCls } = useDesign('app-logo');
+      const { getCollapsedShowTitle } = useMenuSetting();
+      const go = useGo();
+      const title = computed(() => appStore.getAppTitle);
+      const logo = computed(() => imgUrlPrefix + appStore.getAppLogo);
+
+      const getAppLogoClass = computed(() => [
+        prefixCls,
+        props.theme,
+        { 'collapsed-show-title': unref(getCollapsedShowTitle) },
+      ]);
+
+      const getTitleClass = computed(() => [
+        `${prefixCls}__title`,
+        {
+          'xs:opacity-0': !props.alwaysShowTitle,
+        },
+      ]);
+
+      function goHome() {
+        go(PageEnum.BASE_HOME); // 初始化加载页面
+      }
+
+      return {
+        imgUrlPrefix,
+        logo,
+        getAppLogoClass,
+        getTitleClass,
+        getCollapsedShowTitle,
+        goHome,
+        title,
+        prefixCls,
+      };
+    },
+  });
+</script>
+<style lang="less" scoped>
+  @prefix-cls: ~'@{namespace}-app-logo';
+
+  .@{prefix-cls} {
+    display: flex;
+    align-items: center;
+    padding-left: 7px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &.light {
+      border-bottom: 1px solid @border-color-base;
+    }
+
+    &.collapsed-show-title {
+      padding-left: 20px;
+    }
+
+    &.light &__title {
+      color: @primary-color;
+    }
+
+    &.dark &__title {
+      color: @white;
+    }
+
+    &__title {
+      font-size: 16px;
+      font-weight: 700;
+      transition: all 0.5s;
+    }
+  }
+</style>
